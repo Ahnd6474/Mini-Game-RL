@@ -264,3 +264,51 @@ def dpn_loss(
         "entropy": entropy,
         "total": policy_loss - entropy_weight * entropy,
     }
+
+
+def ppo_loss(
+    output: DPNOutput,
+    actions: Tensor,
+    old_log_probabilities: Tensor,
+    advantages: Tensor,
+    *,
+    clip_range: float = 0.2,
+    entropy_weight: float = 0.01,
+    temperature: float = 1.0,
+) -> dict[str, Tensor]:
+    """Clipped PPO objective for a separately trained DPN.
+
+    ``old_log_probabilities`` must come from the exact transformed position and
+    action used during rollout. Advantages are produced by a frozen DVN and
+    normalized once by the trainer before all PPO epochs.
+    """
+    if not 0.0 < clip_range < 1.0:
+        raise ValueError("clip_range must be in (0, 1)")
+    if temperature <= 0.0:
+        raise ValueError("temperature must be positive for PPO")
+    logits = output.policy_logits.float() / temperature
+    log_probabilities = F.log_softmax(logits, dim=-1)
+    chosen_log_probabilities = log_probabilities.gather(
+        1, actions.long()[:, None]
+    ).squeeze(1)
+    old_log_probabilities = old_log_probabilities.detach().float()
+    advantages = advantages.detach().float()
+    log_ratio = (chosen_log_probabilities - old_log_probabilities).clamp(-20, 20)
+    ratio = log_ratio.exp()
+    unclipped = ratio * advantages
+    clipped = ratio.clamp(1.0 - clip_range, 1.0 + clip_range) * advantages
+    policy_loss = -torch.minimum(unclipped, clipped).mean()
+
+    probabilities = log_probabilities.exp()
+    safe_log_probabilities = torch.nan_to_num(log_probabilities, neginf=0.0)
+    entropy = -(probabilities * safe_log_probabilities).sum(dim=1).mean()
+    approximate_kl = ((ratio - 1.0) - log_ratio).mean()
+    clip_fraction = ((ratio - 1.0).abs() > clip_range).float().mean()
+    return {
+        "policy": policy_loss,
+        "entropy": entropy,
+        "approx_kl": approximate_kl,
+        "clip_fraction": clip_fraction,
+        "ratio_mean": ratio.mean(),
+        "total": policy_loss - entropy_weight * entropy,
+    }

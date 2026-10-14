@@ -105,7 +105,9 @@ class PurePythonDPN:
         weights = {}
         offset = 0
         for name, shape in TENSORS:
-            count = math.prod(shape)
+            count = 1
+            for dimension in shape:
+                count *= dimension
             values = struct.unpack_from("<%de" % count, raw, offset)
             if len(shape) == 2:
                 rows, columns = shape

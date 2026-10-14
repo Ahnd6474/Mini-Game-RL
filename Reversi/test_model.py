@@ -5,7 +5,7 @@ import torch
 from Reversi import BLACK, ReversiEnv, coord_to_action
 from Reversi.model import (
     DPN, DVN, FINAL_EMPTY, FINAL_OPPONENT, FINAL_OWN, dpn_loss, dvn_loss,
-    expected_disc_difference, final_board_classes, temporal_deltas,
+    expected_disc_difference, final_board_classes, ppo_loss, temporal_deltas,
 )
 
 
@@ -68,6 +68,22 @@ class ReversiModelTest(unittest.TestCase):
             terminated=torch.tensor([False, True]),
         )
         self.assertTrue(torch.allclose(delta, torch.tensor([0.3, 0.8])))
+
+    def test_ppo_ratio_starts_at_one(self) -> None:
+        output = self.dpn(self.board, self.player, self.legal_mask)
+        action = torch.tensor([coord_to_action(3, 4)])
+        old_log_probability = torch.log_softmax(
+            output.policy_logits.float(), dim=-1
+        ).gather(1, action[:, None]).squeeze(1)
+        losses = ppo_loss(
+            output,
+            action,
+            old_log_probability,
+            torch.tensor([0.5]),
+        )
+        torch.testing.assert_close(losses["ratio_mean"], torch.tensor(1.0))
+        torch.testing.assert_close(losses["clip_fraction"], torch.tensor(0.0))
+        torch.testing.assert_close(losses["approx_kl"], torch.tensor(0.0))
 
     def test_expected_disc_difference_shape(self) -> None:
         output = self.dvn(self.board, self.player, self.legal_mask)

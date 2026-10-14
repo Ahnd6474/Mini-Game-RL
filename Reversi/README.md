@@ -42,12 +42,24 @@ python -m Reversi.random_agent
 있습니다. 둘 다 기본적으로 64차원, 3-layer, 4-head입니다.
 
 - `DVN`: 최종 64칸 소유권과 현재 플레이어의 승패 가치 지도학습
-- `DPN`: 고정된 DVN의 negamax temporal delta로 65개 행동 policy 학습
+- `DPN`: 고정된 DVN의 negamax temporal delta를 advantage로 사용하는 PPO 학습
 
 `batch_env.py`는 여러 게임을 `[N, 8, 8]` NumPy 배열 하나에 보관합니다.
 합법 수와 뒤집기를 전체 게임에 동시에 계산하고, DPN 추론과 두 모델의
 학습 minibatch만 GPU에서 수행합니다. 학습 sample은 GPU에 한 번 올린 후
 회전·반사 증강도 GPU에서 실행합니다.
+
+DPN rollout에서는 무작위 D4 변환을 먼저 적용한 관측에서 행동을 샘플링하고
+그 상태의 old log-probability를 함께 저장합니다. 따라서 PPO likelihood ratio가
+대칭 증강 때문에 어긋나지 않습니다. 기본값은 4 PPO epoch, clip range 0.2,
+target KL 0.02, DPN learning rate `1e-4`입니다. DVN은 기존 지도학습을 그대로
+유지합니다.
+
+DVN은 기본적으로 현재 rollout과 과거 상태 reservoir를 1:1로 섞어 학습합니다.
+reservoir는 최대 262,144개 상태를 균등 표본으로 유지하며 체크포인트에도 함께
+저장됩니다. DPN self-play의 절반은 과거 tree benchmark 최고 정책 중 하나를
+상대 색으로 사용합니다. 과거 정책의 행동은 PPO loss에서 제외하지만, 그 게임의
+최종 보드와 승패는 DVN 지도학습 데이터로 사용합니다.
 
 ## 선형 평가기와 트리 기준점
 
@@ -71,6 +83,11 @@ epoch별 대칭 가중치 평균을 적용합니다.
 
 탐색기는 transposition table, alpha-beta pruning, 코너 우선 move ordering을
 사용합니다. `--weights`를 생략하면 내장 위치 가중치로 바로 실행됩니다.
+
+깊이 5 트리 제출본은 [submission_tree_depth5.py](submission_tree_depth5.py)입니다.
+학습된 64칸 선형 가중치, 비트보드 규칙, alpha-beta와 transposition table을
+한 파일에 내장하며 외부 패키지가 필요 없습니다. 누적 CPU 4.65초 안전 한도와
+항상 합법 수를 반환하는 fallback이 있어 5초 전체 제한을 넘기지 않습니다.
 
 고정된 무작위 중반 상태에서 깊이별 속도를 재려면 다음을 실행합니다.
 
@@ -113,12 +130,32 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 `--device auto`가 기본값이며 CUDA가 있으면 BF16 AMP를 자동으로 사용합니다.
 체크포인트는 기본적으로 `Reversi/checkpoints/latest.pt`에 저장됩니다.
 
-현재 RTX 5060 Laptop 8GB에서 측정한 기본 처리량 최적점은 게임 1,024개,
-minibatch 1,024, DVN/DPN 각 1 epoch입니다. 다른 GPU에서 다시 측정하려면:
+현재 RTX 5060 Laptop 8GB에서 측정한 batch 처리량 최적점은 게임 1,024개,
+minibatch 1,024입니다. PPO 기본 설정은 DVN 1 epoch, DPN 4 epoch이므로
+단일 policy epoch 벤치마크보다 처리량이 낮습니다. 다른 GPU에서 다시 측정하려면:
 
 ```powershell
 .venv\Scripts\python.exe -m Reversi.benchmark
 ```
+
+고정 검증셋, 트리 기준 대국, JSONL 지표, SVG 학습 곡선까지 포함한 실험은:
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.experiment `
+  --iterations 30 --games 1024 --eval-every 5
+```
+
+기존 PPO 체크포인트에서 replay/policy-pool 학습을 이어가려면:
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.experiment `
+  --resume Reversi/runs/ppo_30/selected.pt `
+  --run-dir Reversi/runs/ppo_replay_pool `
+  --iterations 15 --entropy-weight 0.02
+```
+
+결과는 기본적으로 `Reversi/runs/latest`에 저장됩니다. 트리 평가는 고정된
+오프닝마다 DPN이 흑과 백을 한 번씩 맡으므로 선후공 편향을 줄입니다.
 
 ## 제출 코드 생성
 
