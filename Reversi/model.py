@@ -157,8 +157,6 @@ class DPN(nn.Module):
         current_player: Tensor,
         legal_action_mask: Tensor,
     ) -> DPNOutput:
-        if not torch.all(legal_action_mask.bool().any(dim=1)):
-            raise ValueError("each DPN sample needs at least one legal action")
         cls, cells = self.encoder(board, current_player, legal_action_mask)
         logits = torch.cat(
             (self.cell_head(cells).squeeze(-1), self.pass_head(cls)), dim=1
@@ -182,10 +180,8 @@ def _validate_position_inputs(
         board.shape[0], BOARD_CELLS + 1
     ):
         raise ValueError("legal_action_mask must have shape [batch, 65]")
-    if not torch.all((board == -1) | (board == 0) | (board == 1)):
-        raise ValueError("board values must be -1, 0, or 1")
-    if not torch.all((current_player == -1) | (current_player == 1)):
-        raise ValueError("current_player values must be -1 or 1")
+    # Value-content checks deliberately stay out of this hot path. Reducing
+    # torch.all(...) to a Python bool would synchronize CUDA every forward.
 
 
 def final_board_classes(final_board: Tensor, players: Tensor) -> Tensor:

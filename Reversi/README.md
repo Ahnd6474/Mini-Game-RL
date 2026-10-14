@@ -82,3 +82,10 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 
 `--device auto`가 기본값이며 CUDA가 있으면 BF16 AMP를 자동으로 사용합니다.
 체크포인트는 기본적으로 `Reversi/checkpoints/latest.pt`에 저장됩니다.
+
+현재 RTX 5060 Laptop 8GB에서 측정한 기본 처리량 최적점은 게임 1,024개,
+minibatch 1,024, DVN/DPN 각 1 epoch입니다. 다른 GPU에서 다시 측정하려면:
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.benchmark
+```

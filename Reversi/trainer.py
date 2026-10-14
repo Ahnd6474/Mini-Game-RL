@@ -22,8 +22,8 @@ from .symmetry import transform_action
 class TrainerConfig:
     games_per_iteration: int = 1024
     minibatch_size: int = 1024
-    dvn_epochs: int = 3
-    dpn_epochs: int = 3
+    dvn_epochs: int = 1
+    dpn_epochs: int = 1
     dvn_learning_rate: float = 3e-4
     dpn_learning_rate: float = 3e-4
     weight_decay: float = 1e-4
