@@ -9,6 +9,7 @@ from pathlib import Path
 import torch
 
 from .model import DPN, DVN
+from .export_submission import export_dpn_submission
 from .trainer import SelfPlayTrainer, TrainerConfig
 
 
@@ -26,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         "--checkpoint",
         type=Path,
         default=Path("Reversi/checkpoints/latest.pt"),
+    )
+    parser.add_argument(
+        "--submission",
+        type=Path,
+        default=Path("Reversi/checkpoints/submission.py"),
     )
     return parser.parse_args()
 
@@ -56,6 +62,7 @@ def main() -> None:
         print(json.dumps({"iteration": iteration, **metrics}, sort_keys=True))
         args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
         torch.save(trainer.checkpoint(iteration), args.checkpoint)
+        export_dpn_submission(trainer.dpn, args.submission)
 
 
 if __name__ == "__main__":

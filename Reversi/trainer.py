@@ -380,6 +380,7 @@ class SelfPlayTrainer:
         return {
             "iteration": iteration,
             "trainer_config": asdict(self.config),
+            "model_config": asdict(self.dpn.config),
             "dvn": self.dvn.state_dict(),
             "dpn": self.dpn.state_dict(),
             "dvn_optimizer": self.dvn_optimizer.state_dict(),

@@ -57,7 +57,9 @@ class BoardEncoder(nn.Module):
             nhead=config.num_heads,
             dim_feedforward=config.dim_feedforward,
             dropout=config.dropout,
-            activation="gelu",
+            # tanh GELU can be reproduced efficiently by standalone NumPy
+            # inference in the generated submission source.
+            activation=nn.GELU(approximate="tanh"),
             batch_first=True,
             norm_first=True,
         )

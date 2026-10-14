@@ -49,6 +49,36 @@ python -m Reversi.random_agent
 학습 minibatch만 GPU에서 수행합니다. 학습 sample은 GPU에 한 번 올린 후
 회전·반사 증강도 GPU에서 실행합니다.
 
+## 선형 평가기와 트리 기준점
+
+본 학습 전에 64칸만 입력받는 bias 없는 선형 승패 평가기를 만들 수 있습니다.
+보드는 항상 현재 플레이어 기준으로 변환하므로 색을 뒤집으면 logit도 정확히
+반대가 됩니다. 랜덤 대국은 NumPy로 병렬 생성하고, 학습 중 무작위 D4 증강과
+epoch별 대칭 가중치 평균을 적용합니다.
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.train_linear `
+  --games 16384 --epochs 12 --batch-size 8192
+```
+
+결과는 기본적으로 `Reversi/checkpoints/linear_value.json`에 저장됩니다. 이
+가중치를 비트보드 negamax/alpha-beta 탐색기의 leaf 평가 함수로 사용합니다.
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.tree_agent `
+  --weights Reversi/checkpoints/linear_value.json --depth 4
+```
+
+탐색기는 transposition table, alpha-beta pruning, 코너 우선 move ordering을
+사용합니다. `--weights`를 생략하면 내장 위치 가중치로 바로 실행됩니다.
+
+고정된 무작위 중반 상태에서 깊이별 속도를 재려면 다음을 실행합니다.
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.benchmark_tree `
+  --weights Reversi/checkpoints/linear_value.json
+```
+
 ```python
 import torch
 
@@ -89,3 +119,25 @@ minibatch 1,024, DVN/DPN 각 1 epoch입니다. 다른 GPU에서 다시 측정하
 ```powershell
 .venv\Scripts\python.exe -m Reversi.benchmark
 ```
+
+## 제출 코드 생성
+
+각 학습 iteration이 끝날 때 다음 두 파일을 자동으로 갱신합니다.
+
+- `Reversi/checkpoints/latest.pt`: DVN/DPN과 optimizer를 포함한 학습 체크포인트
+- `Reversi/checkpoints/submission.py`: DPN 가중치를 내장한 단일 제출 소스
+
+제출 소스는 PyTorch, NumPy, 별도 모델 파일을 사용하지 않습니다. FP16
+가중치와 DPN Transformer의 최소 실행 코드를 한 파일에 넣으며, 실행 시에는
+Python 표준 라이브러리만으로 가중치를 복원하고 모델을 추론합니다.
+
+기존 체크포인트에서 다시 만들 수도 있습니다.
+
+```powershell
+.venv\Scripts\python.exe -m Reversi.export_submission `
+  --checkpoint Reversi/checkpoints/latest.pt `
+  --output Reversi/submission.py
+```
+
+제출 환경과 동일하게 site-packages 없이 확인하려면 생성 파일을
+`python -S Reversi/submission.py`로 실행할 수 있습니다.
